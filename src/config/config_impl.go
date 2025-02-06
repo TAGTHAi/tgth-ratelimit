@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	pb_struct "github.com/envoyproxy/go-control-plane/envoy/extensions/common/ratelimit/v3"
@@ -190,7 +191,7 @@ func (this *rateLimitDescriptor) loadDescriptors(config RateLimitConfigToLoad, p
 		this.descriptors[finalKey] = newDescriptor
 
 		// Preload keys ending with "*" symbol.
-		if finalKey[len(finalKey)-1:] == "*" {
+		if strings.Contains(finalKey, "*") {
 			this.wildcardKeys = append(this.wildcardKeys, finalKey)
 		}
 	}
@@ -326,7 +327,15 @@ func (this *rateLimitConfigImpl) GetLimit(
 
 		if nextDescriptor == nil && len(prevDescriptor.wildcardKeys) > 0 {
 			for _, wildcardKey := range prevDescriptor.wildcardKeys {
-				if strings.HasPrefix(finalKey, strings.TrimSuffix(wildcardKey, "*")) {
+				// turn wildcard into regex
+				regexPattern := "^" + strings.ReplaceAll(wildcardKey, "*", "[^/]*") + "$"
+				match, err := regexp.MatchString(regexPattern, finalKey)
+				if err != nil {
+					errorText := fmt.Sprintf("wildcard matching error: %s", err.Error())
+					logger.Debugf(errorText)
+					panic(errorText)
+				}
+				if match {
 					nextDescriptor = descriptorsMap[wildcardKey]
 					break
 				}
